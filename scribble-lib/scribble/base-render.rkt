@@ -56,7 +56,8 @@
                 [extra-files null]
                 [image-preferences null]
                 [helper-file-prefix #f]
-                [keep-existing-helper-files? #f])
+                [keep-existing-helper-files? #f]
+                [xexpr? #f])
 
     (define/public (current-render-mode)
       '())

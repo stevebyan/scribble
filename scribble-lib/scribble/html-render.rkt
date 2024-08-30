@@ -275,7 +275,7 @@
              extract-authors
              extract-pretitle
              link-render-style-at-element)
-    (inherit-field prefix-file style-file style-extra-files image-preferences)
+    (inherit-field prefix-file style-file style-extra-files image-preferences xexpr?)
 
     (init-field [alt-paths null]
                 ;; `up-path' is either a link "up", or #t which goes
@@ -290,7 +290,10 @@
     (define/override (current-render-mode)
       '(html))
 
-    (define/override (get-suffix) #".html")
+    (define/override (get-suffix)
+      (if xexpr?
+          #".xexpr"
+          #".html"))
 
     (define/override (index-manual-newlines?)
       #t)
@@ -608,7 +611,7 @@
                                      (and (pair? (cdr l)) (null? (cddr l)))]
                                     [else (loop (cdr l))])))))
         (define top? (eq? t top))
-        (define header
+        (define header-html
           `(table ([cellspacing "0"] [cellpadding "0"])
              (tr ()
                (td ([style "width: 1em;"])
@@ -621,6 +624,12 @@
                        ,(if expand? 9660 9658))))
                (td () ,@num)
                (td () ,@title))))
+        (define header-xexpr
+          `(ul ()
+               (li () ,@num)
+               (li () ,@title)))
+        (define header
+          (if xexpr? header-xexpr header-html))
         `(div ([class ,(if top?
                            "tocviewlist tocviewlisttopspace"
                            "tocviewlist")])
@@ -866,62 +875,81 @@
           (if (bytes? prefix-file)
               (display prefix-file)
               (call-with-input-file*
-               prefix-file
-               (lambda (in)
-                 (copy-port in (current-output-port)))))
+                  prefix-file
+                (lambda (in)
+                  (copy-port in (current-output-port)))))
           (parameterize ([xml:empty-tag-shorthand xml:html-empty-tags])
-            (xml:write-xexpr
+            ;;(xml:write-xexpr
+            (define head-xexpr
+              `(head ()
+                     (meta ([http-equiv "content-type"]
+                            [content "text/html; charset=utf-8"]))
+                     (meta ([name "viewport"]
+                            [content "width=device-width, initial-scale=0.8"]))
+                     ,title
+                     ,(scribble-css-contents scribble-css
+                                             scribble-css-path
+                                             dir-depth)
+                     ,@(map (lambda (style-file)
+                              (if (or (bytes? style-file) (url? style-file))
+                                  (scribble-css-contents style-file #f dir-depth)
+                                  (let ([p (or (lookup-path style-file alt-paths)
+                                               (install-file/as-url style-file))])
+                                    (scribble-css-contents style-file p dir-depth))))
+                            (append (extract css-addition? css-addition-path)
+                                    (list style-file)
+                                    (extract css-style-addition? css-style-addition-path)
+                                    style-extra-files))
+                     ,(scribble-js-contents script-file
+                                            script-file-path
+                                            dir-depth)
+                     ,@(map (lambda (script-file)
+                              (if (or (bytes? script-file) (url? script-file))
+                                  (scribble-js-contents script-file #f dir-depth)
+                                  (let ([p (or (lookup-path script-file alt-paths)
+                                               (install-file/as-url script-file))])
+                                    (scribble-js-contents script-file p dir-depth))))
+                            (append
+                             (extract js-addition? js-addition-path)
+                             (extract js-style-addition? js-style-addition-path)
+                             (reverse extra-script-files)))
+                     ,(xml:comment "[if IE 6]><style type=\"text/css\">.SIEHidden { overflow: hidden; }</style><![endif]")
+                     ,@(extract head-addition? head-addition-xexpr)
+                     ,@(for/list ([p (style-properties (part-style d))]
+                                  #:when (head-extra? p))
+                         (head-extra-xexpr p))))
+            (define main-xexpr
+              `(div ([class "maincolumn"])
+                    (div ([class "main"])
+                         ,@(parameterize ([current-version (extract-version d)])
+                             (render-version d ri))
+                         ,@(navigation d ri #t)
+                         ,@(render-part d ri)
+                         ,@(navigation d ri #f))))
+            (define body-xexpr
+              `(body ([id ,(or (extract-part-body-id d ri)
+                               "scribble-racket-lang-org")])
+                     ,@(if (part-style? d 'no-toc+aux)
+                           null
+                           (render-toc-view d ri))
+                     ,main-xexpr
+                     (div ([id "contextindicator"]) nbsp)))
+            (define part-xexpr 
               `(html ,(style->attribs (part-style d))
-                 (head ()
-                   (meta ([http-equiv "content-type"]
-                          [content "text/html; charset=utf-8"]))
-                   (meta ([name "viewport"]
-                          [content "width=device-width, initial-scale=0.8"]))
-                   ,title
-                   ,(scribble-css-contents scribble-css
-                                           scribble-css-path
-                                           dir-depth)
-                   ,@(map (lambda (style-file)
-                            (if (or (bytes? style-file) (url? style-file))
-                                (scribble-css-contents style-file #f dir-depth)
-                                (let ([p (or (lookup-path style-file alt-paths)
-                                             (install-file/as-url style-file))])
-                                  (scribble-css-contents style-file p dir-depth))))
-                          (append (extract css-addition? css-addition-path)
-                                  (list style-file)
-                                  (extract css-style-addition? css-style-addition-path)
-                                  style-extra-files))
-                   ,(scribble-js-contents script-file
-                                          script-file-path
-                                          dir-depth)
-                   ,@(map (lambda (script-file)
-                            (if (or (bytes? script-file) (url? script-file))
-                                (scribble-js-contents script-file #f dir-depth)
-                                (let ([p (or (lookup-path script-file alt-paths)
-                                             (install-file/as-url script-file))])
-                                  (scribble-js-contents script-file p dir-depth))))
-                          (append
-                           (extract js-addition? js-addition-path)
-                           (extract js-style-addition? js-style-addition-path)
-                           (reverse extra-script-files)))
-                   ,(xml:comment "[if IE 6]><style type=\"text/css\">.SIEHidden { overflow: hidden; }</style><![endif]")
-                   ,@(extract head-addition? head-addition-xexpr)
-                   ,@(for/list ([p (style-properties (part-style d))]
-                                #:when (head-extra? p))
-                       (head-extra-xexpr p)))
-                 (body ([id ,(or (extract-part-body-id d ri)
-                                 "scribble-racket-lang-org")])
-                   ,@(if (part-style? d 'no-toc+aux)
-                         null
-                         (render-toc-view d ri))
-                   (div ([class "maincolumn"])
-                     (div ([class "main"])
-                       ,@(parameterize ([current-version (extract-version d)])
-                           (render-version d ri))
-                       ,@(navigation d ri #t)
-                       ,@(render-part d ri)
-                       ,@(navigation d ri #f)))
-                   (div ([id "contextindicator"]) nbsp))))))))
+                     ,head-xexpr
+                     ,body-xexpr))
+            (if xexpr?
+                (begin
+                  (write `(define head-xexpr ',head-xexpr))
+                  (display "\n\n")
+                  (write `(define main-xexpr ',main-xexpr))
+                  (display "\n\n")
+            
+                  (write `(define body-xexpr ',body-xexpr))
+                  (display "\n")
+                
+                  )
+                (xml:write-xexpr part-xexpr))))))
 
     (define (toc-part? d ri)
       (and (part-style? d 'toc)
