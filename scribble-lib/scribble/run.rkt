@@ -222,6 +222,7 @@
                          'scribble "result from `~s' of `~s' is not an xref: ~e"
                          (cdr mod+id) (car mod+id) xr))
                       xr))
-          #:info-out-file (current-info-output-file)))
+          #:info-out-file (current-info-output-file)
+          #:xexpr-out? (current-xexpr)))
 
 (run)

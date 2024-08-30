@@ -27,9 +27,9 @@
            #:xrefs (listof xref?)
            #:info-in-files (listof path-string?)
            #:info-out-file (or/c #f path-string?)
-           #:xexpr? any/c
            #:quiet? any/c
-           #:warn-undefined? any/c)
+           #:warn-undefined? any/c
+           #:xexpr-out? any/c)
           . ->* . void?)])
 
 (define (render docs
@@ -49,9 +49,9 @@
                 #:xrefs [xrefs null]
                 #:info-in-files [info-input-files null]
                 #:info-out-file [info-output-file #f]
-                #:xexpr? [xexpr? #f]
                 #:quiet? [quiet? #t]
-                #:warn-undefined? [warn-undefined? (not quiet?)])
+                #:warn-undefined? [warn-undefined? (not quiet?)]
+                #:xexpr-out? [xexpr-out? #f])
   (when dest-dir (make-directory* dest-dir))
   (let ([renderer (new (render-mixin render%)
                        [dest-dir dest-dir]
@@ -60,7 +60,7 @@
                        [style-extra-files style-extra-files]
                        [extra-files extra-files]
                        [image-preferences image-preferences]
-                       [xexpr? xexpr?]
+                       [xexpr-out? xexpr-out?]
                        [helper-file-prefix helper-file-prefix]
                        [keep-existing-helper-files? keep-existing-helper-files?])])
     (when redirect

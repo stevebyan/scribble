@@ -22,6 +22,7 @@
          racket/draw/gif
          pkg/path
          (prefix-in xml: xml/xml)
+         fmt
          (for-syntax racket/base)
          "search.rkt"
          (except-in "base.rkt" url))
@@ -275,7 +276,7 @@
              extract-authors
              extract-pretitle
              link-render-style-at-element)
-    (inherit-field prefix-file style-file style-extra-files image-preferences xexpr?)
+    (inherit-field prefix-file style-file style-extra-files image-preferences xexpr-out?)
 
     (init-field [alt-paths null]
                 ;; `up-path' is either a link "up", or #t which goes
@@ -291,7 +292,7 @@
       '(html))
 
     (define/override (get-suffix)
-      (if xexpr?
+      (if xexpr-out?
           #".xexpr"
           #".html"))
 
@@ -629,7 +630,7 @@
                (li () ,@num)
                (li () ,@title)))
         (define header
-          (if xexpr? header-xexpr header-html))
+          (if xexpr-out? header-xexpr header-html))
         `(div ([class ,(if top?
                            "tocviewlist tocviewlisttopspace"
                            "tocviewlist")])
@@ -938,17 +939,14 @@
               `(html ,(style->attribs (part-style d))
                      ,head-xexpr
                      ,body-xexpr))
-            (if xexpr?
+            (if xexpr-out?
                 (begin
                   (write `(define head-xexpr ',head-xexpr))
                   (display "\n\n")
                   (write `(define main-xexpr ',main-xexpr))
                   (display "\n\n")
-            
                   (write `(define body-xexpr ',body-xexpr))
-                  (display "\n")
-                
-                  )
+                  (display "\n"))
                 (xml:write-xexpr part-xexpr))))))
 
     (define (toc-part? d ri)
