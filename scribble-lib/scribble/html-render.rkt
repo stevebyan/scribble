@@ -612,7 +612,7 @@
                                      (and (pair? (cdr l)) (null? (cddr l)))]
                                     [else (loop (cdr l))])))))
         (define top? (eq? t top))
-        (define header-html
+        (define header-table
           `(table ([cellspacing "0"] [cellpadding "0"])
              (tr ()
                (td ([style "width: 1em;"])
@@ -625,12 +625,23 @@
                        ,(if expand? 9660 9658))))
                (td () ,@num)
                (td () ,@title))))
-        (define header-xexpr
+        (define header-unordered-list
           `(ul ()
-               (li () ,@num)
-               (li () ,@title)))
+               (li () ,@num (tt nbsp) ,@title)))
         (define header
-          (if xexpr-out? header-xexpr header-html))
+          (if xexpr-out? header-unordered-list header-table))
+        (define toc-view-sublist-table
+          `(table ([cellspacing "0"] [cellpadding "0"])
+                   ,@(for/list ([c children])
+                       (let-values ([(t n) (toc-item->title+num c #t)])
+                         `(tr () (td ([align "right"]) ,@n) (td () ,@t))))))
+        (define toc-view-sublist-unordered-list
+          `(ul ()
+                   ,@(for/list ([c children])
+                       (let-values ([(t n) (toc-item->title+num c #t)])
+                         `(li () ,@n ,@t)))))
+        (define toc-view-sublist
+          (if xexpr-out? toc-view-sublist-unordered-list toc-view-sublist-table))
         `(div ([class ,(if top?
                            "tocviewlist tocviewlisttopspace"
                            "tocviewlist")])
@@ -644,10 +655,8 @@
                               [else "tocviewsublist"])]
                      [style ,(format "display: ~a;" (if expand? 'block 'none))]
                      [id ,id])
-                 (table ([cellspacing "0"] [cellpadding "0"])
-                   ,@(for/list ([c children])
-                       (let-values ([(t n) (toc-item->title+num c #t)])
-                         `(tr () (td ([align "right"]) ,@n) (td () ,@t)))))))))
+                  ,toc-view-sublist)
+              )))
       (define (toc-content)
         ;; no links -- the code constructs links where needed
         (parameterize ([current-no-links #t]
@@ -756,8 +765,9 @@
                                        (flatten p prefixes #f)))
                        (part-parts d)))))))
           (define any-parts? (ormap (compose part? (lambda (p) (vector-ref p 0))) ps))
-          (if (null? ps)
-            null
+          ;; :fixme: there's too much duplicated code in toc-sub-list-table and
+          ;; toc-sub-list-unordered-list. I'm too much of a Racket newbie to refactor them.
+          (define toc-sub-list-table
             `((div ([class ,box-class])
                 ,@(get-onthispage-label)
                 (table ([class "tocsublist"] [cellspacing "0"])
@@ -810,7 +820,65 @@
                                                         (toc-target2-element-toc-content p)
                                                         (element-content p)))
                                                 from-d ri)))))))))
-                         ps)))))))
+                         ps)))))
+          (define toc-sub-list-unordered-list
+            `((div ([class ,box-class])
+                ,@(get-onthispage-label)
+                (ul ([class "tocsublist"])
+                  ,@(map (lambda (p)
+                           (let ([p (vector-ref p 0)]
+                                 [prefixes (vector-ref p 1)]
+                                 [from-d (vector-ref p 2)]
+                                 [add-tag-prefixes
+                                  (lambda (t prefixes)
+                                    (if (null? prefixes)
+                                        t
+                                        (cons (car t) (append prefixes (cdr t)))))])
+                             `(li ()
+                                ,@(if (part? p)
+                                      `((span ([class "tocsublinknumber"])
+                                              ,@(format-number
+                                                 (collected-info-number
+                                                  (part-collected-info p ri))
+                                                 '((tt nbsp)))))
+                                      '(""))
+                                ,@(if (toc-element? p)
+                                      (render-content (toc-element-toc-content p)
+                                                      from-d ri)
+                                      (parameterize ([current-no-links #t]
+                                                     [extra-breaking? #t])
+                                        `((a ([href
+                                               ,(format
+                                                 "#~a"
+                                                 (uri-unreserved-encode
+                                                  (anchor-name
+                                                   (add-tag-prefixes
+                                                    (tag-key (if (part? p)
+                                                                 (car (part-tags/nonempty p))
+                                                                 (target-element-tag p))
+                                                             ri)
+                                                    prefixes))))]
+                                              [class
+                                                  ,(cond
+                                                    [(part? p) "tocsubseclink"]
+                                                    [any-parts? "tocsubnonseclink"]
+                                                    [else "tocsublink"])]
+                                              [data-pltdoc "x"])
+                                             ,@(render-content
+                                                (if (part? p)
+                                                    (strip-aux
+                                                     (or (part-title-content p)
+                                                         "???"))
+                                                    (if (toc-target2-element? p)
+                                                        (toc-target2-element-toc-content p)
+                                                        (element-content p)))
+                                                from-d ri))))))))
+                         ps)))))
+          (define toc-sub-list
+            (if xexpr-out? toc-sub-list-unordered-list toc-sub-list-table))
+          (if (null? ps)
+            null
+            toc-sub-list)))
 
     (define/private (extract-inherited d ri pred extract)
       (or (ormap (lambda (v)
@@ -873,14 +941,18 @@
           (define script-file-path
             (or (lookup-path script-file alt-paths) 
                 (install-file/as-url script-file)))
-          (if (bytes? prefix-file)
-              (display prefix-file)
-              (call-with-input-file*
-                  prefix-file
-                (lambda (in)
-                  (copy-port in (current-output-port)))))
+          (if xexpr-out?
+              (begin
+                (displayln "#lang racket/base")
+                (displayln "(require \"xml\")")
+                (displayln ""))
+              (if (bytes? prefix-file)
+                  (display prefix-file)
+                  (call-with-input-file*
+                      prefix-file
+                    (lambda (in)
+                      (copy-port in (current-output-port))))))
           (parameterize ([xml:empty-tag-shorthand xml:html-empty-tags])
-            ;;(xml:write-xexpr
             (define head-xexpr
               `(head ()
                      (meta ([http-equiv "content-type"]
@@ -927,6 +999,10 @@
                          ,@(navigation d ri #t)
                          ,@(render-part d ri)
                          ,@(navigation d ri #f))))
+            (define toc-xexpr
+              `(,@(if (part-style? d 'no-toc+aux)
+                      null
+                      (render-toc-view d ri))))
             (define body-xexpr
               `(body ([id ,(or (extract-part-body-id d ri)
                                "scribble-racket-lang-org")])
@@ -941,11 +1017,9 @@
                      ,body-xexpr))
             (if xexpr-out?
                 (begin
-                  (write `(define head-xexpr ',head-xexpr))
-                  (display "\n\n")
-                  (write `(define main-xexpr ',main-xexpr))
-                  (display "\n\n")
-                  (write `(define body-xexpr ',body-xexpr))
+                  (writeln `(define toc-xexpr ',toc-xexpr))
+                  (display "\n")
+                  (writeln `(define main-xexpr ',main-xexpr))
                   (display "\n"))
                 (xml:write-xexpr part-xexpr))))))
 
