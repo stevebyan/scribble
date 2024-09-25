@@ -944,8 +944,8 @@
           (if xexpr-out?
               (begin
                 (displayln "#lang racket/base")
-                (displayln "(require \"xml\")")
-                (displayln ""))
+                (displayln "(require \"xml\")\n")
+                (displayln "(provide title-xexpr toc-xexpr main-xexpr)\n"))
               (if (bytes? prefix-file)
                   (display prefix-file)
                   (call-with-input-file*
@@ -991,6 +991,8 @@
                      ,@(for/list ([p (style-properties (part-style d))]
                                   #:when (head-extra? p))
                          (head-extra-xexpr p))))
+            (define title-xexpr
+              `(,title))
             (define main-xexpr
               `(div ([class "maincolumn"])
                     (div ([class "main"])
@@ -1017,10 +1019,14 @@
                      ,body-xexpr))
             (if xexpr-out?
                 (begin
+                  (writeln `(define title-xexpr ',title-xexpr))
+                  (display "\n")
                   (writeln `(define toc-xexpr ',toc-xexpr))
                   (display "\n")
                   (writeln `(define main-xexpr ',main-xexpr))
-                  (display "\n"))
+                  (display "\n")
+                  ;; for debugging, print entire xexpr that would have been output as html
+                  (writeln `(define part-xexpr ',part-xexpr)))
                 (xml:write-xexpr part-xexpr))))))
 
     (define (toc-part? d ri)
