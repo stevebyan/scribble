@@ -612,7 +612,7 @@
                                      (and (pair? (cdr l)) (null? (cddr l)))]
                                     [else (loop (cdr l))])))))
         (define top? (eq? t top))
-        (define header-table
+        (define header
           `(table ([cellspacing "0"] [cellpadding "0"])
              (tr ()
                (td ([style "width: 1em;"])
@@ -625,23 +625,6 @@
                        ,(if expand? 9660 9658))))
                (td () ,@num)
                (td () ,@title))))
-        (define header-unordered-list
-          `(ul ()
-               (li () ,@num (tt nbsp) ,@title)))
-        (define header
-          (if xexpr-out? header-unordered-list header-table))
-        (define toc-view-sublist-table
-          `(table ([cellspacing "0"] [cellpadding "0"])
-                   ,@(for/list ([c children])
-                       (let-values ([(t n) (toc-item->title+num c #t)])
-                         `(tr () (td ([align "right"]) ,@n) (td () ,@t))))))
-        (define toc-view-sublist-unordered-list
-          `(ul ()
-                   ,@(for/list ([c children])
-                       (let-values ([(t n) (toc-item->title+num c #t)])
-                         `(li () ,@n ,@t)))))
-        (define toc-view-sublist
-          (if xexpr-out? toc-view-sublist-unordered-list toc-view-sublist-table))
         `(div ([class ,(if top?
                            "tocviewlist tocviewlisttopspace"
                            "tocviewlist")])
@@ -655,8 +638,10 @@
                               [else "tocviewsublist"])]
                      [style ,(format "display: ~a;" (if expand? 'block 'none))]
                      [id ,id])
-                  ,toc-view-sublist)
-              )))
+                 (table ([cellspacing "0"] [cellpadding "0"])
+                   ,@(for/list ([c children])
+                       (let-values ([(t n) (toc-item->title+num c #t)])
+                         `(tr () (td ([align "right"]) ,@n) (td () ,@t)))))))))
       (define (toc-content)
         ;; no links -- the code constructs links where needed
         (parameterize ([current-no-links #t]
@@ -747,8 +732,8 @@
           (define ps
             ((if (or (nearly-top? d) (eq? d top)) values (lambda (p) (if (pair? p) (cdr p) null)))
              (let flatten ([d d] [prefixes null] [top? #t])
-               (let ([prefixes (if (and (not top?) (part-tag-prefix d))
-                                   (cons (part-tag-prefix d) prefixes)
+               (let ([prefixes (if (and (not top?) (part-tag-prefix-string d))
+                                   (cons (part-tag-prefix-string d) prefixes)
                                    prefixes)])
                  (append*
                   ;; don't include the section if it's in the TOC
@@ -765,9 +750,8 @@
                                        (flatten p prefixes #f)))
                        (part-parts d)))))))
           (define any-parts? (ormap (compose part? (lambda (p) (vector-ref p 0))) ps))
-          ;; :fixme: there's too much duplicated code in toc-sub-list-table and
-          ;; toc-sub-list-unordered-list. I'm too much of a Racket newbie to refactor them.
-          (define toc-sub-list-table
+          (if (null? ps)
+            null
             `((div ([class ,box-class])
                 ,@(get-onthispage-label)
                 (table ([class "tocsublist"] [cellspacing "0"])
@@ -820,65 +804,7 @@
                                                         (toc-target2-element-toc-content p)
                                                         (element-content p)))
                                                 from-d ri)))))))))
-                         ps)))))
-          (define toc-sub-list-unordered-list
-            `((div ([class ,box-class])
-                ,@(get-onthispage-label)
-                (ul ([class "tocsublist"])
-                  ,@(map (lambda (p)
-                           (let ([p (vector-ref p 0)]
-                                 [prefixes (vector-ref p 1)]
-                                 [from-d (vector-ref p 2)]
-                                 [add-tag-prefixes
-                                  (lambda (t prefixes)
-                                    (if (null? prefixes)
-                                        t
-                                        (cons (car t) (append prefixes (cdr t)))))])
-                             `(li ()
-                                ,@(if (part? p)
-                                      `((span ([class "tocsublinknumber"])
-                                              ,@(format-number
-                                                 (collected-info-number
-                                                  (part-collected-info p ri))
-                                                 '((tt nbsp)))))
-                                      '(""))
-                                ,@(if (toc-element? p)
-                                      (render-content (toc-element-toc-content p)
-                                                      from-d ri)
-                                      (parameterize ([current-no-links #t]
-                                                     [extra-breaking? #t])
-                                        `((a ([href
-                                               ,(format
-                                                 "#~a"
-                                                 (uri-unreserved-encode
-                                                  (anchor-name
-                                                   (add-tag-prefixes
-                                                    (tag-key (if (part? p)
-                                                                 (car (part-tags/nonempty p))
-                                                                 (target-element-tag p))
-                                                             ri)
-                                                    prefixes))))]
-                                              [class
-                                                  ,(cond
-                                                    [(part? p) "tocsubseclink"]
-                                                    [any-parts? "tocsubnonseclink"]
-                                                    [else "tocsublink"])]
-                                              [data-pltdoc "x"])
-                                             ,@(render-content
-                                                (if (part? p)
-                                                    (strip-aux
-                                                     (or (part-title-content p)
-                                                         "???"))
-                                                    (if (toc-target2-element? p)
-                                                        (toc-target2-element-toc-content p)
-                                                        (element-content p)))
-                                                from-d ri))))))))
-                         ps)))))
-          (define toc-sub-list
-            (if xexpr-out? toc-sub-list-unordered-list toc-sub-list-table))
-          (if (null? ps)
-            null
-            toc-sub-list)))
+                         ps)))))))
 
     (define/private (extract-inherited d ri pred extract)
       (or (ormap (lambda (v)
@@ -941,92 +867,80 @@
           (define script-file-path
             (or (lookup-path script-file alt-paths) 
                 (install-file/as-url script-file)))
-          (if xexpr-out?
-              (begin
-                (displayln "#lang racket/base")
-                (displayln "(require \"xml\")\n")
-                (displayln "(provide title-xexpr toc-xexpr main-xexpr)\n"))
-              (if (bytes? prefix-file)
-                  (display prefix-file)
-                  (call-with-input-file*
-                      prefix-file
-                    (lambda (in)
-                      (copy-port in (current-output-port))))))
+          (if (and xexpr-out? (bytes? prefix-file))
+              (display prefix-file)
+              (call-with-input-file*
+               prefix-file
+               (lambda (in)
+                 (copy-port in (current-output-port)))))
           (parameterize ([xml:empty-tag-shorthand xml:html-empty-tags])
-            (define head-xexpr
-              `(head ()
-                     (meta ([http-equiv "content-type"]
-                            [content "text/html; charset=utf-8"]))
-                     (meta ([name "viewport"]
-                            [content "width=device-width, initial-scale=0.8"]))
-                     ,title
-                     ,(scribble-css-contents scribble-css
-                                             scribble-css-path
-                                             dir-depth)
-                     ,@(map (lambda (style-file)
-                              (if (or (bytes? style-file) (url? style-file))
-                                  (scribble-css-contents style-file #f dir-depth)
-                                  (let ([p (or (lookup-path style-file alt-paths)
-                                               (install-file/as-url style-file))])
-                                    (scribble-css-contents style-file p dir-depth))))
-                            (append (extract css-addition? css-addition-path)
-                                    (list style-file)
-                                    (extract css-style-addition? css-style-addition-path)
-                                    style-extra-files))
-                     ,(scribble-js-contents script-file
-                                            script-file-path
-                                            dir-depth)
-                     ,@(map (lambda (script-file)
-                              (if (or (bytes? script-file) (url? script-file))
-                                  (scribble-js-contents script-file #f dir-depth)
-                                  (let ([p (or (lookup-path script-file alt-paths)
-                                               (install-file/as-url script-file))])
-                                    (scribble-js-contents script-file p dir-depth))))
-                            (append
-                             (extract js-addition? js-addition-path)
-                             (extract js-style-addition? js-style-addition-path)
-                             (reverse extra-script-files)))
-                     ,(xml:comment "[if IE 6]><style type=\"text/css\">.SIEHidden { overflow: hidden; }</style><![endif]")
-                     ,@(extract head-addition? head-addition-xexpr)
-                     ,@(for/list ([p (style-properties (part-style d))]
-                                  #:when (head-extra? p))
-                         (head-extra-xexpr p))))
-            (define title-xexpr
-              `(,title))
-            (define main-xexpr
-              `(div ([class "maincolumn"])
-                    (div ([class "main"])
-                         ,@(parameterize ([current-version (extract-version d)])
-                             (render-version d ri))
-                         ,@(navigation d ri #t)
-                         ,@(render-part d ri)
-                         ,@(navigation d ri #f))))
-            (define toc-xexpr
-              `(,@(if (part-style? d 'no-toc+aux)
-                      null
-                      (render-toc-view d ri))))
-            (define body-xexpr
-              `(body ([id ,(or (extract-part-body-id d ri)
-                               "scribble-racket-lang-org")])
-                     ,@(if (part-style? d 'no-toc+aux)
-                           null
-                           (render-toc-view d ri))
-                     ,main-xexpr
-                     (div ([id "contextindicator"]) nbsp)))
-            (define part-xexpr 
+            (define part-xexpr
               `(html ,(style->attribs (part-style d))
                      ,head-xexpr
                      ,body-xexpr))
+            (define head-xexpr
+                 `(head ()
+                   (meta ([http-equiv "content-type"]
+                          [content "text/html; charset=utf-8"]))
+                   (meta ([name "viewport"]
+                          [content "width=device-width, initial-scale=0.8"]))
+                   ,title
+                   ,(scribble-css-contents scribble-css
+                                           scribble-css-path
+                                           dir-depth)
+                   ,@(map (lambda (style-file)
+                            (if (or (bytes? style-file) (url? style-file))
+                                (scribble-css-contents style-file #f dir-depth)
+                                (let ([p (or (lookup-path style-file alt-paths)
+                                             (install-file/as-url style-file))])
+                                  (scribble-css-contents style-file p dir-depth))))
+                          (append (extract css-addition? css-addition-path)
+                                  (list style-file)
+                                  (extract css-style-addition? css-style-addition-path)
+                                  style-extra-files))
+                   ,(scribble-js-contents script-file
+                                          script-file-path
+                                          dir-depth)
+                   ,@(map (lambda (script-file)
+                            (if (or (bytes? script-file) (url? script-file))
+                                (scribble-js-contents script-file #f dir-depth)
+                                (let ([p (or (lookup-path script-file alt-paths)
+                                             (install-file/as-url script-file))])
+                                  (scribble-js-contents script-file p dir-depth))))
+                          (append
+                           (extract js-addition? js-addition-path)
+                           (extract js-style-addition? js-style-addition-path)
+                           (reverse extra-script-files)))
+                   ,(xml:comment "[if IE 6]><style type=\"text/css\">.SIEHidden { overflow: hidden; }</style><![endif]")
+                   ,@(extract head-addition? head-addition-xexpr)
+                   ,@(for/list ([p (style-properties (part-style d))]
+                                #:when (head-extra? p))
+                       (head-extra-xexpr p))))
+            (define body-xexpr
+                 `(body ([id ,(or (extract-part-body-id d ri)
+                                 "scribble-racket-lang-org")])
+                   ,@(if (part-style? d 'no-toc+aux)
+                         null
+                         (render-toc-view d ri))
+                   ,main-xexpr
+                   ,context-indicator-xexpr))
+            (define main-xexpr
+                   `(div ([class "maincolumn"])
+                     (div ([class "main"])
+                       ,@(parameterize ([current-version (extract-version d)])
+                           (render-version d ri))
+                       ,@(navigation d ri #t)
+                       ,@(render-part d ri)
+                       ,@(navigation d ri #f))))
+            (define context-indicator-xexpr
+                   `(div ([id "contextindicator"]) nbsp))
             (if xexpr-out?
                 (begin
-                  (writeln `(define title-xexpr ',title-xexpr))
-                  (display "\n")
-                  (writeln `(define toc-xexpr ',toc-xexpr))
-                  (display "\n")
-                  (writeln `(define main-xexpr ',main-xexpr))
-                  (display "\n")
-                  ;; for debugging, print entire xexpr that would have been output as html
-                  (writeln `(define part-xexpr ',part-xexpr)))
+                  (writeln "main-xexpr:")
+                  (writeln main-xexpr)
+                  (writeln)
+                  (writeln "body-xexpr:")
+                  (writeln body-xexpr))
                 (xml:write-xexpr part-xexpr))))))
 
     (define (toc-part? d ri)
@@ -2056,7 +1970,7 @@
         (apply
          string-append
          (for/list ([p (in-list parents)])
-           (or (part-tag-prefix p) "")))))
+           (or (part-tag-prefix-string p) "")))))
 
     (define/override (part-nesting-depth d ri)
       (min (part-depth d ri) (sub1 directory-depth)))

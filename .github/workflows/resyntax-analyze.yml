@@ -21,12 +21,13 @@ on:
 jobs:
   analyze:
     runs-on: ubuntu-latest
+    if: ${{ github.triggering_actor != 'resyntax-ci[bot]' }}
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4.1.7
+        uses: actions/checkout@v4.2.2
         # See https://github.com/actions/checkout/issues/118.
         with:
           fetch-depth: 0
@@ -47,7 +48,7 @@ jobs:
       - name: Analyze changed files
         run: xvfb-run racket -l- resyntax/cli analyze --local-git-repository . "origin/${GITHUB_BASE_REF}" --output-as-github-review --output-to-file ./resyntax-review.json
       - name: Upload analysis artifact
-        uses: actions/upload-artifact@v4.3.5
+        uses: actions/upload-artifact@v4.6.1
         with:
           name: resyntax-review
           path: resyntax-review.json
