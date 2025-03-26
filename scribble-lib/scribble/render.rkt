@@ -60,6 +60,7 @@
          [style-extra-files style-extra-files]
          [extra-files extra-files]
          [image-preferences image-preferences]
+         [xexpr-out? xexpr-out?]
          [helper-file-prefix helper-file-prefix]
          [keep-existing-helper-files? keep-existing-helper-files?]))
   (when redirect

@@ -29,6 +29,16 @@
 (provide render-mixin
          render-multi-mixin)
 
+(struct scribble-xexpr-page
+  (title     ; string?
+   author    ; string?
+   date      ; string? - 8601 datetime format
+   version   ; string? version number
+   tags      ; (listof string?)
+   toc       ; tbd
+   article   ; xexpr?
+   ) #:prefab)
+
 (define (number->decimal-string s)
   (number->string (if (integer? s) s (exact->inexact s))))
 
@@ -274,6 +284,7 @@
              extract-part-style-files
              extract-version
              extract-authors
+             extract-date
              extract-pretitle
              link-render-style-at-element)
     (inherit-field prefix-file style-file style-extra-files image-preferences xexpr-out?)
@@ -293,7 +304,7 @@
 
     (define/override (get-suffix)
       (if xexpr-out?
-          #".xexpr"
+          #".rktd"
           #".html"))
 
     (define/override (index-manual-newlines?)
@@ -850,6 +861,10 @@
                                   `(title ,@(format-number number '(nbsp))
                                           ,(content->string (strip-aux c) this d ri)))]
                             [else `(title)])]
+               [title-string (cond [(part-title-content d)
+                             => (lambda (c)
+                                  (content->string (strip-aux c) this d ri))]
+                            [else null])]
                [dir-depth (part-nesting-depth d ri)]
                [extract (lambda (pred get) (extract-part-style-files 
                                             d
@@ -867,17 +882,14 @@
           (define script-file-path
             (or (lookup-path script-file alt-paths) 
                 (install-file/as-url script-file)))
-          (if (and xexpr-out? (bytes? prefix-file))
+          (unless  xexpr-out?
+            (if (bytes? prefix-file)
               (display prefix-file)
               (call-with-input-file*
                prefix-file
                (lambda (in)
-                 (copy-port in (current-output-port)))))
+                 (copy-port in (current-output-port))))))
           (parameterize ([xml:empty-tag-shorthand xml:html-empty-tags])
-            (define part-xexpr
-              `(html ,(style->attribs (part-style d))
-                     ,head-xexpr
-                     ,body-xexpr))
             (define head-xexpr
                  `(head ()
                    (meta ([http-equiv "content-type"]
@@ -916,6 +928,15 @@
                    ,@(for/list ([p (style-properties (part-style d))]
                                 #:when (head-extra? p))
                        (head-extra-xexpr p))))
+            (define content-xexpr (render-part d ri))
+            (define main-xexpr
+                   `(div ([class "maincolumn"])
+                     (div ([class "main"])
+                       ,@(parameterize ([current-version (extract-version d)])
+                           (render-version d ri))
+                       ,@(navigation d ri #t)
+                       ,@content-xexpr
+                       ,@(navigation d ri #f))))
             (define body-xexpr
                  `(body ([id ,(or (extract-part-body-id d ri)
                                  "scribble-racket-lang-org")])
@@ -923,24 +944,33 @@
                          null
                          (render-toc-view d ri))
                    ,main-xexpr
-                   ,context-indicator-xexpr))
-            (define main-xexpr
-                   `(div ([class "maincolumn"])
-                     (div ([class "main"])
-                       ,@(parameterize ([current-version (extract-version d)])
-                           (render-version d ri))
-                       ,@(navigation d ri #t)
-                       ,@(render-part d ri)
-                       ,@(navigation d ri #f))))
-            (define context-indicator-xexpr
-                   `(div ([id "contextindicator"]) nbsp))
+                   (div ([id "contextindicator"]) nbsp)))
+            (define part-xexpr
+              `(html ,(style->attribs (part-style d))
+                     ,head-xexpr
+                     ,body-xexpr))
+            (define article-xexpr
+                   `(article ([class "document"])
+                       ,@content-xexpr))
+            (define (authors-list)
+              (define authors-paragraph-list (extract-authors d))
+              (for/list ([p authors-paragraph-list])
+                (car (paragraph-content p))))
             (if xexpr-out?
-                (begin
-                  (writeln "main-xexpr:")
-                  (writeln main-xexpr)
-                  (writeln)
-                  (writeln "body-xexpr:")
-                  (writeln body-xexpr))
+                (let ([article
+                       (scribble-xexpr-page
+                        title-string        ; title
+                        (authors-list)     ; authors
+                        (extract-date d)    ; date
+                        (extract-version d) ; document version
+                        null                ; tags
+                        null                ; toc
+                        article-xexpr          ; article
+                        )]
+                      [article-string (open-output-string)])
+                  (begin
+                    (write article article-string)
+                    (displayln (program-format (get-output-string article-string) #:width 72))))
                 (xml:write-xexpr part-xexpr))))))
 
     (define (toc-part? d ri)
