@@ -8,7 +8,6 @@
          racket/path
          racket/file
          racket/port
-         racket/pretty
          racket/list
          racket/string
          racket/trace
@@ -24,6 +23,7 @@
          racket/draw/gif
          pkg/path
          (prefix-in xml: xml/xml)
+         fmt
          (for-syntax racket/base)
          "search.rkt"
          (except-in "base.rkt" url))
@@ -1175,7 +1175,9 @@
                         article-xexpr       ; article
                         )]
                       [article-string (open-output-string)])
-                  (pretty-write article))
+                  (begin
+                    (write article article-string)
+                    (displayln (program-format (get-output-string article-string) #:width 72))))
                 (xml:write-xexpr part-xexpr))))))
 
     (define (toc-part? d ri)
