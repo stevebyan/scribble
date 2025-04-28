@@ -1435,6 +1435,7 @@
                      ,@(if (part-title-content d)
                            (render-content (part-title-content d) d ri)
                            null)
+                     ; (unless bare-anchors? ...)
                      (span ([class "button-group"])
                            ,@(match (part-tags d)
                                ['() '()]
@@ -1451,7 +1452,8 @@
                                    '())
                              ;; this is a dummy node so that the line height of heading-anchor
                              ;; and heading-source are correct (even when their font size is not 100%)
-                             (span ([style "visibility: hidden"]) " "))))])
+                             (span ([style "visibility: hidden"]) " "))
+                     ))])
              ,@(let ([auths (extract-authors d)])
                  (if (null? auths)
                      null
