@@ -18,6 +18,7 @@
 (define current-render-mixin       (make-parameter html:render-mixin))
 (define current-html               (make-parameter #t))
 (define current-xexpr              (make-parameter #f))
+(define current-bare-anchors       (make-parameter #f))
 (define current-dest-directory     (make-parameter #f))
 (define current-dest-name          (make-parameter #f))
 (define current-info-output-file   (make-parameter #f))
@@ -96,6 +97,8 @@
    #:once-each
    [("--xexpr") "generate xexpr body and navigation output instead of html output"
     (current-xexpr #t)]
+   [("--bare-anchors") "do not generate 'Link to here' links for section anchors in html output"
+    (current-bare-anchors #t)]
    [("--lib" "-l") "treat argument <file>s as library paths instead of filesystem paths"
     (current-lib-mode #t)]
    [("--dest") dir "write output in <dir>"
@@ -223,6 +226,7 @@
                          (cdr mod+id) (car mod+id) xr))
                       xr))
           #:info-out-file (current-info-output-file)
-          #:xexpr-out? (current-xexpr)))
+          #:xexpr-out? (current-xexpr)
+          #:bare-anchors? (current-bare-anchors)))
 
 (run)
