@@ -124,6 +124,7 @@
 (define current-version (make-parameter (version)))
 (define current-part-files (make-parameter #f))
 (define current-render-convertible-requests (make-parameter '(png@2x-bytes png-bytes svg-bytes gif-bytes)))
+(define bare-anchors? (make-parameter #f)) ;; don't decorate anchors with "link-to-here" hovers
 
 (define (url->string* u)
   (parameterize ([current-url-encode-mode 'unreserved])
@@ -288,8 +289,7 @@
              extract-date
              extract-pretitle
              link-render-style-at-element)
-    (inherit-field prefix-file style-file style-extra-files image-preferences xexpr-out?
-                   bare-anchors?)
+    (inherit-field prefix-file style-file style-extra-files image-preferences xexpr-out?)
 
     (init-field [alt-paths null]
                 ;; `up-path' is either a link "up", or #t which goes
@@ -1042,7 +1042,8 @@
       0)
 
     (define/public (render-one-part d ri fn number)
-      (parameterize ([current-output-file fn])
+      (parameterize ([current-output-file fn]
+                     [bare-anchors? (part-style? d 'bare-anchors)])
         (let* ([defaults (let loop ([d d])
                            (or (ormap (lambda (v) (and (html-defaults? v) v))
                                       (style-properties (part-style d)))
@@ -1436,7 +1437,7 @@
                      ,@(if (part-title-content d)
                            (render-content (part-title-content d) d ri)
                            null)
-                     ,@(if bare-anchors?
+                     ,@(if (bare-anchors?)
                            null
                            `((span ([class "button-group"])
                                    ,@(match (part-tags d)

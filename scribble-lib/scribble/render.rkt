@@ -27,8 +27,7 @@
                                          #:info-out-file (or/c #f path-string?)
                                          #:quiet? any/c
                                          #:warn-undefined? any/c
-                                         #:xexpr-out? boolean?
-                                         #:bare-anchors? boolean?)
+                                         #:xexpr-out? boolean?)
                          . ->* .
                          void?)]))
 
@@ -51,8 +50,7 @@
                 #:info-out-file [info-output-file #f]
                 #:quiet? [quiet? #t]
                 #:warn-undefined? [warn-undefined? (not quiet?)]
-                #:xexpr-out? [xexpr-out? #f]
-                #:bare-anchors? [bare-anchors? #f])
+                #:xexpr-out? [xexpr-out? #f])
   (when dest-dir (make-directory* dest-dir))
   (define renderer
     (new (render-mixin render%)
@@ -63,7 +61,6 @@
          [extra-files extra-files]
          [image-preferences image-preferences]
          [xexpr-out? xexpr-out?]
-         [bare-anchors? bare-anchors?]
          [helper-file-prefix helper-file-prefix]
          [keep-existing-helper-files? keep-existing-helper-files?]))
   (when redirect
